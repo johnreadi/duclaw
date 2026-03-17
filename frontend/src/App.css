@@ -1,0 +1,27 @@
+.App {
+  min-height: 100vh;
+  background-color: #0f172a;
+}
+
+.app-header {
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  padding: 1.5rem 2rem;
+  border-bottom: 1px solid #334155;
+}
+
+.app-header h1 {
+  font-size: 1.875rem;
+  font-weight: 700;
+  color: #38bdf8;
+  margin: 0;
+}
+
+.app-header p {
+  color: #94a3b8;
+  margin: 0.25rem 0 0 0;
+  font-size: 0.875rem;
+}
+
+main {
+  padding: 1.5rem;
+}
