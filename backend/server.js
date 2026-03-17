@@ -89,12 +89,16 @@ async function diagnoseService(containerName) {
     const networks = containerInfo.NetworkSettings.Networks;
     diagnosis.checks.networks = Object.keys(networks);
     
+    // Vérifier si connecté au réseau dokploy (pour les apps Dokploy)
     const dokployNetwork = networks['dokploy-network'];
-    if (!dokployNetwork) {
-      diagnosis.errors.push('Container non connecté au réseau dokploy-network');
-      diagnosis.recommendations.push('Vérifier la configuration réseau du service dans Dokploy');
-    } else {
+    if (dokployNetwork) {
       diagnosis.checks.ipAddress = dokployNetwork.IPAddress;
+    } else {
+      // Chercher une autre IP si pas sur dokploy-network
+      const firstNetwork = Object.values(networks)[0];
+      if (firstNetwork) {
+        diagnosis.checks.ipAddress = firstNetwork.IPAddress;
+      }
     }
 
     // Logs
@@ -149,11 +153,16 @@ async function diagnoseService(containerName) {
 async function checkAllServices() {
   try {
     const containers = await docker.listContainers({ all: true });
-    const dokployContainers = containers.filter(c => 
-      c.Names.some(name => name.includes('dokploy') || name.includes('traefik'))
-    );
+    
+    // Exclure uniquement les containers système de Docker et DUCLAW lui-même
+    const excludedContainers = ['duclaw-backend', 'duclaw-frontend', 'duclaw-db'];
+    
+    const monitoredContainers = containers.filter(c => {
+      const name = c.Names[0].replace('/', '');
+      return !excludedContainers.includes(name);
+    });
 
-    for (const containerInfo of dokployContainers) {
+    for (const containerInfo of monitoredContainers) {
       const containerName = containerInfo.Names[0].replace('/', '');
       const diagnosis = await diagnoseService(containerName);
       servicesStatus.set(containerName, diagnosis);
@@ -392,6 +401,17 @@ cron.schedule('0 0 * * *', async () => {
 // Protection de l'infrastructure Dokploy toutes les 2 minutes
 cron.schedule('*/2 * * * *', async () => {
   await remediationEngine.protectDokployInfrastructure();
+});
+
+// Protection de tous les containers (y compris applications utilisateur)
+cron.schedule('*/5 * * * *', async () => {
+  console.log('Protection automatique de tous les containers...');
+  for (const [containerName, diagnosis] of servicesStatus.entries()) {
+    // Appliquer la remédiation pour tous les containers en échec
+    if (!diagnosis.checks?.containerRunning || diagnosis.errors?.length > 0) {
+      await remediationEngine.evaluateAndRemediate(containerName, diagnosis);
+    }
+  }
 });
 
 // Monitoring sécurité VPS toutes les 5 minutes

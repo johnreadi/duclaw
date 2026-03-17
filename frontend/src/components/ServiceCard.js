@@ -6,7 +6,11 @@ import {
   Activity,
   Cpu,
   MemoryStick,
-  RotateCcw
+  RotateCcw,
+  Server,
+  Database,
+  Globe,
+  Shield
 } from 'lucide-react';
 import './ServiceCard.css';
 
@@ -14,6 +18,32 @@ function ServiceCard({ service, onClick }) {
   const isRunning = service.checks?.containerRunning;
   const hasErrors = service.errors?.length > 0;
   const restartCount = service.checks?.restartCount || 0;
+  
+  // Déterminer le type de container
+  const getContainerType = () => {
+    const name = service.container.toLowerCase();
+    if (name.includes('dokploy')) return 'infrastructure';
+    if (name.includes('traefik')) return 'proxy';
+    if (name.includes('redis') || name.includes('db') || name.includes('postgres') || name.includes('mongo')) return 'database';
+    if (name.includes('duclaw')) return 'monitoring';
+    return 'application';
+  };
+  
+  const getTypeIcon = () => {
+    const type = getContainerType();
+    switch (type) {
+      case 'infrastructure':
+        return <Shield size={14} className="type-icon" />;
+      case 'proxy':
+        return <Globe size={14} className="type-icon" />;
+      case 'database':
+        return <Database size={14} className="type-icon" />;
+      case 'monitoring':
+        return <Activity size={14} className="type-icon" />;
+      default:
+        return <Server size={14} className="type-icon" />;
+    }
+  };
   
   const getStatusIcon = () => {
     if (!isRunning) return <XCircle className="status-icon error" size={24} />;
@@ -32,7 +62,13 @@ function ServiceCard({ service, onClick }) {
       <div className="service-header">
         {getStatusIcon()}
         <div className="service-info">
-          <h3 className="service-name">{service.container}</h3>
+          <div className="service-name-wrapper">
+            <h3 className="service-name">{service.container}</h3>
+            <span className={`service-type ${getContainerType()}`}>
+              {getTypeIcon()}
+              {getContainerType()}
+            </span>
+          </div>
           <span className={`service-status ${getStatusClass()}`}>
             {service.checks?.containerStatus || 'Unknown'}
           </span>

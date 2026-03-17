@@ -48,6 +48,12 @@
   min-width: 0;
 }
 
+.service-name-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .service-name {
   font-size: 0.875rem;
   font-weight: 600;
@@ -56,6 +62,47 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.service-type {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.625rem;
+  padding: 0.125rem 0.375rem;
+  border-radius: 9999px;
+  text-transform: uppercase;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.service-type.application {
+  background: rgba(59, 130, 246, 0.2);
+  color: #3b82f6;
+}
+
+.service-type.infrastructure {
+  background: rgba(139, 92, 246, 0.2);
+  color: #8b5cf6;
+}
+
+.service-type.proxy {
+  background: rgba(14, 165, 233, 0.2);
+  color: #0ea5e9;
+}
+
+.service-type.database {
+  background: rgba(16, 185, 129, 0.2);
+  color: #10b981;
+}
+
+.service-type.monitoring {
+  background: rgba(245, 158, 11, 0.2);
+  color: #f59e0b;
+}
+
+.type-icon {
+  opacity: 0.8;
 }
 
 .service-status {
