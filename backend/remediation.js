@@ -6,6 +6,8 @@ class RemediationEngine {
     this.alertManager = alertManager;
     this.remediationHistory = new Map();
     this.circuitBreakers = new Map(); // Éviter les boucles de redémarrage
+    this.errorPatterns = new Map(); // Tracker les patterns d'erreurs
+    this.timeoutTracker = new Map(); // Tracker les timeouts spécifiquement
   }
 
   async evaluateAndRemediate(containerName, diagnosis) {
@@ -86,28 +88,79 @@ class RemediationEngine {
       });
     }
 
-    // Action 4: Timeout détectés (502/504)
+    // Action 4: Timeout détectés (502/504) - Gestion intelligente
     if (diagnosis.errors?.some(e => e.includes('timeout') || e.includes('ETIMEDOUT'))) {
-      actions.push({
-        type: 'timeout_investigation',
-        priority: 'high',
-        automated: false,
-        description: 'Timeouts détectés - Vérifier les dépendances externes'
-      });
+      const timeoutInfo = this.trackTimeout(containerName);
       
-      // Si plusieurs timeouts consécutifs, suggérer un redémarrage
-      const timeoutHistory = this.getTimeoutHistory(containerName);
-      if (timeoutHistory.count > 5) {
+      // Ignorer les timeouts isolés (moins de 3 en 10 minutes)
+      if (timeoutInfo.count < 3) {
         actions.push({
-          type: 'suggested_restart',
+          type: 'timeout_logged',
+          priority: 'low',
+          automated: true,
+          description: `Timeout détecté (${timeoutInfo.count}/3) - Surveillance uniquement`
+        });
+      }
+      // Entre 3 et 5 timeouts : alerte mais pas d'action
+      else if (timeoutInfo.count < 5) {
+        actions.push({
+          type: 'timeout_warning',
           priority: 'medium',
           automated: false,
-          description: 'Redémarrage suggéré après multiples timeouts'
+          description: `Timeouts fréquents (${timeoutInfo.count} en 10 min) - Monitoring renforcé`
+        });
+      }
+      // Plus de 5 timeouts : redémarrage suggéré
+      else if (timeoutInfo.count < 10) {
+        actions.push({
+          type: 'timeout_restart_suggested',
+          priority: 'high',
+          automated: false,
+          description: `Nombreux timeouts (${timeoutInfo.count}) - Redémarrage recommandé`
+        });
+      }
+      // Plus de 10 timeouts : redémarrage automatique
+      else {
+        actions.push({
+          type: 'auto_restart_timeout',
+          priority: 'critical',
+          automated: true,
+          description: `Timeouts critiques (${timeoutInfo.count}) - Redémarrage automatique`
+        });
+        
+        // Exécuter le redémarrage pour les timeouts répétés
+        await this.restartContainer(containerName);
+        
+        // Réinitialiser le compteur
+        this.timeoutTracker.delete(containerName);
+      }
+    }
+
+    // Action 5: Erreurs HTTP 502/504/404 spécifiques
+    const httpErrors = this.analyzeHttpErrors(diagnosis);
+    if (httpErrors.has502 || httpErrors.has504) {
+      const errorCount = this.trackHttpError(containerName, httpErrors);
+      
+      if (errorCount >= 5) {
+        actions.push({
+          type: 'auto_restart_http_errors',
+          priority: 'high',
+          automated: true,
+          description: `Erreurs HTTP 502/504 répétées (${errorCount}) - Redémarrage auto`
+        });
+        
+        await this.restartContainer(containerName);
+      } else {
+        actions.push({
+          type: 'http_error_warning',
+          priority: 'medium',
+          automated: false,
+          description: `Erreurs HTTP détectées (${errorCount}/5) - Surveillance`
         });
       }
     }
 
-    // Action 5: Restart loop détecté
+    // Action 6: Restart loop détecté
     if (diagnosis.checks?.restartCount > 5) {
       actions.push({
         type: 'restart_loop_detected',
@@ -210,13 +263,70 @@ class RemediationEngine {
       analysis.patterns.push('SYNTAX_ERROR');
       analysis.summary = 'Erreur de syntaxe dans le code';
     }
+    if (logs.includes('502 Bad Gateway')) {
+      analysis.patterns.push('HTTP_502');
+      analysis.summary = 'Erreur 502 Bad Gateway détectée';
+    }
+    if (logs.includes('504 Gateway Timeout')) {
+      analysis.patterns.push('HTTP_504');
+      analysis.summary = 'Erreur 504 Gateway Timeout détectée';
+    }
 
     return analysis;
   }
 
+  analyzeHttpErrors(diagnosis) {
+    const logs = diagnosis.checks?.recentLogs?.join(' ') || '';
+    return {
+      has502: logs.includes('502') || logs.includes('Bad Gateway'),
+      has504: logs.includes('504') || logs.includes('Gateway Timeout'),
+      has404: logs.includes('404') || logs.includes('Not Found')
+    };
+  }
+
+  trackHttpError(containerName, httpErrors) {
+    const now = Date.now();
+    const windowMs = 10 * 60 * 1000; // 10 minutes
+    
+    if (!this.errorPatterns.has(containerName)) {
+      this.errorPatterns.set(containerName, { httpErrors: [], count: 0 });
+    }
+    
+    const tracker = this.errorPatterns.get(containerName);
+    
+    // Nettoyer les vieilles erreurs
+    tracker.httpErrors = tracker.httpErrors.filter(e => now - e.timestamp < windowMs);
+    
+    // Ajouter la nouvelle erreur
+    tracker.httpErrors.push({ timestamp: now, ...httpErrors });
+    tracker.count = tracker.httpErrors.length;
+    
+    return tracker.count;
+  }
+
+  trackTimeout(containerName) {
+    const now = Date.now();
+    const windowMs = 10 * 60 * 1000; // 10 minutes
+    
+    if (!this.timeoutTracker.has(containerName)) {
+      this.timeoutTracker.set(containerName, { count: 0, firstSeen: now, history: [] });
+    }
+    
+    const tracker = this.timeoutTracker.get(containerName);
+    
+    // Nettoyer les vieux timeouts (plus de 10 minutes)
+    tracker.history = tracker.history.filter(t => now - t < windowMs);
+    
+    // Ajouter le nouveau timeout
+    tracker.history.push(now);
+    tracker.count = tracker.history.length;
+    
+    return tracker;
+  }
+
   getTimeoutHistory(containerName) {
-    // Simplifié - en production, utiliser la base de données
-    return { count: 0 };
+    const tracker = this.timeoutTracker.get(containerName);
+    return tracker || { count: 0 };
   }
 
   // Protection contre les déploiements qui font tomber Dokploy
