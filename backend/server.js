@@ -496,27 +496,50 @@ cron.schedule('*/2 * * * *', async () => {
 // ==================== INITIALISATION ====================
 
 async function init() {
-  try {
-    // Initialiser la base de données
-    await initDatabase();
-    console.log('Base de données initialisée');
-
-    // Créer l'admin par défaut
-    await authManager.createDefaultAdmin();
-
-    // Premier check des services
-    await checkAllServices();
-
-    // Démarrer le serveur
-    const PORT = process.env.PORT || 3000;
-    server.listen(PORT, () => {
-      console.log(`DUCLAW Backend démarré sur le port ${PORT}`);
-      console.log('Monitoring actif pour les services Dokploy');
-    });
-  } catch (error) {
-    console.error('Erreur lors de l\'initialisation:', error);
-    process.exit(1);
+  // Attente de la base de données avec retry
+  let dbReady = false;
+  for (let i = 0; i < 10; i++) {
+    try {
+      await initDatabase();
+      console.log('Base de données initialisée');
+      dbReady = true;
+      break;
+    } catch (error) {
+      console.warn(`DB non prête (tentative ${i + 1}/10): ${error.message}`);
+      await new Promise(r => setTimeout(r, 3000));
+    }
   }
+
+  if (!dbReady) {
+    console.error('Impossible de se connecter à la base de données après 10 tentatives');
+    // Continuer sans DB en mode dégradé plutôt que crasher
+  }
+
+  // Créer l'admin par défaut (si DB disponible)
+  if (dbReady) {
+    try {
+      await authManager.createDefaultAdmin();
+    } catch (error) {
+      console.warn('Impossible de créer l\'admin par défaut:', error.message);
+    }
+  }
+
+  // Premier check des services (sans crash si Docker inaccessible)
+  try {
+    await checkAllServices();
+  } catch (error) {
+    console.warn('Avertissement lors du premier check:', error.message);
+  }
+
+  // Démarrer le serveur
+  const PORT = process.env.PORT || 3000;
+  server.listen(PORT, () => {
+    console.log(`DUCLAW Backend démarré sur le port ${PORT}`);
+    console.log('Monitoring actif pour les services Dokploy');
+  });
 }
 
-init();
+init().catch(error => {
+  console.error('Erreur fatale:', error);
+  process.exit(1);
+});
