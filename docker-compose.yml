@@ -13,6 +13,8 @@ services:
       - CHECK_INTERVAL=30000
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "3004:3000"
     networks:
       - dokploy-network
     healthcheck:
