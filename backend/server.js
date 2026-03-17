@@ -76,20 +76,28 @@ async function diagnoseService(containerName) {
     }
 
     // Ressources
-    const stats = await container.stats({ stream: false });
-    const memoryUsage = stats.memory_stats.usage / stats.memory_stats.limit * 100;
-    const cpuDelta = stats.cpu_stats.cpu_usage.total_usage - stats.precpu_stats.cpu_usage.total_usage;
-    const systemDelta = stats.cpu_stats.system_cpu_usage - stats.precpu_stats.system_cpu_usage;
-    const cpuUsage = (cpuDelta / systemDelta) * stats.cpu_stats.online_cpus * 100;
+    try {
+      const stats = await container.stats({ stream: false });
+      const memLimit = stats.memory_stats?.limit || 1;
+      const memUsage = stats.memory_stats?.usage || 0;
+      const memoryUsage = memLimit > 0 ? (memUsage / memLimit * 100) : 0;
+      const cpuDelta = (stats.cpu_stats?.cpu_usage?.total_usage || 0) - (stats.precpu_stats?.cpu_usage?.total_usage || 0);
+      const systemDelta = (stats.cpu_stats?.system_cpu_usage || 0) - (stats.precpu_stats?.system_cpu_usage || 0);
+      const numCpus = stats.cpu_stats?.online_cpus || 1;
+      const cpuUsage = systemDelta > 0 ? (cpuDelta / systemDelta) * numCpus * 100 : 0;
 
-    diagnosis.checks.memoryUsage = memoryUsage.toFixed(2);
-    diagnosis.checks.cpuUsage = cpuUsage.toFixed(2);
-    diagnosis.checks.memoryLimit = stats.memory_stats.limit;
+      diagnosis.checks.memoryUsage = isFinite(memoryUsage) ? memoryUsage.toFixed(2) : '0.00';
+      diagnosis.checks.cpuUsage = isFinite(cpuUsage) ? cpuUsage.toFixed(2) : '0.00';
+      diagnosis.checks.memoryLimit = memLimit;
 
-    if (memoryUsage > 90) {
-      diagnosis.errors.push('Mémoire saturée: ' + memoryUsage.toFixed(2) + '%');
-      diagnosis.recommendations.push('Augmenter la mémoire allouée au container');
-      diagnosis.recommendations.push('Vérifier les fuites mémoire dans l\'application');
+      if (memoryUsage > 90) {
+        diagnosis.errors.push('Mémoire saturée: ' + memoryUsage.toFixed(2) + '%');
+        diagnosis.recommendations.push('Augmenter la mémoire allouée au container');
+        diagnosis.recommendations.push('Vérifier les fuites mémoire dans l\'application');
+      }
+    } catch (statsError) {
+      diagnosis.checks.memoryUsage = 'N/A';
+      diagnosis.checks.cpuUsage = 'N/A';
     }
 
     // Réseau
@@ -109,16 +117,25 @@ async function diagnoseService(containerName) {
     }
 
     // Logs
-    const logs = await container.logs({ 
-      tail: 50, 
-      timestamps: true,
-      stdout: true,
-      stderr: true 
-    });
-    diagnosis.checks.recentLogs = logs.toString('utf-8').split('\n').slice(-10);
+    let logString = '';
+    try {
+      const logs = await container.logs({ 
+        tail: 50, 
+        timestamps: true,
+        stdout: true,
+        stderr: true 
+      });
+      // Nettoyer les caractères non-UTF8 et les séquences d'échappement invalides
+      logString = logs.toString('utf-8')
+        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // caractères de contrôle
+        .replace(/\\u[0-9a-fA-F]{0,3}(?![0-9a-fA-F])/g, '?') // Unicode incomplets
+        .replace(/\\x[0-9a-fA-F]{0,1}(?![0-9a-fA-F])/g, '?'); // Hex incomplets
+      diagnosis.checks.recentLogs = logString.split('\n').slice(-10);
+    } catch (logError) {
+      diagnosis.checks.recentLogs = [`Logs non disponibles: ${logError.message}`];
+    }
 
     // Analyser les logs
-    const logString = logs.toString('utf-8');
     if (logString.includes('ECONNREFUSED')) {
       diagnosis.errors.push('Erreur de connexion à la base de données ou service dépendant');
       diagnosis.recommendations.push('Vérifier que la base de données est accessible');
