@@ -14,6 +14,7 @@ const AlertManager = require('./alerts');
 const SSLMonitor = require('./ssl-monitor');
 const AuthManager = require('./auth');
 const RemediationEngine = require('./remediation');
+const SecurityMonitor = require('./security-monitor');
 
 const app = express();
 const server = http.createServer(app);
@@ -30,6 +31,7 @@ const alertManager = new AlertManager();
 const sslMonitor = new SSLMonitor();
 const authManager = new AuthManager();
 const remediationEngine = new RemediationEngine(docker, alertManager);
+const securityMonitor = new SecurityMonitor(alertManager);
 
 // Stockage des données de monitoring
 const servicesStatus = new Map();
@@ -327,6 +329,25 @@ app.get('/api/ssl/expiring', async (req, res) => {
   }
 });
 
+// Stats système VPS
+app.get('/api/system/stats', async (req, res) => {
+  try {
+    const stats = await securityMonitor.getSystemStats();
+    res.json(stats);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/system/cleanup', AuthManager.requireAdmin, async (req, res) => {
+  try {
+    const result = await securityMonitor.autoCleanDisk();
+    res.json({ success: result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Gestion des utilisateurs (admin uniquement)
 app.get('/api/users', AuthManager.requireAdmin, async (req, res) => {
   try {
@@ -371,6 +392,18 @@ cron.schedule('0 0 * * *', async () => {
 // Protection de l'infrastructure Dokploy toutes les 2 minutes
 cron.schedule('*/2 * * * *', async () => {
   await remediationEngine.protectDokployInfrastructure();
+});
+
+// Monitoring sécurité VPS toutes les 5 minutes
+cron.schedule('*/5 * * * *', async () => {
+  console.log('Vérification sécurité VPS...');
+  await securityMonitor.checkSecurityThreats();
+});
+
+// Monitoring disque et mémoire toutes les 2 minutes
+cron.schedule('*/2 * * * *', async () => {
+  await securityMonitor.checkDiskSpace();
+  await securityMonitor.checkMemoryUsage();
 });
 
 // ==================== INITIALISATION ====================

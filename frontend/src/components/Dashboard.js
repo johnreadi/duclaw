@@ -15,6 +15,7 @@ import {
 import ServiceCard from './ServiceCard';
 import ServiceDetail from './ServiceDetail';
 import Alerts from './Alerts';
+import SystemStats from './SystemStats';
 import './Dashboard.css';
 
 function Dashboard() {
@@ -149,6 +150,7 @@ function Dashboard() {
         </div>
         
         <div className="sidebar">
+          <SystemStats />
           <Alerts />
         </div>
       </div>

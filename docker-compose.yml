@@ -25,6 +25,10 @@ services:
       dockerfile: Dockerfile
     container_name: duclaw-backend
     restart: unless-stopped
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
     environment:
       - PORT=3000
       - DOCKER_SOCKET=/var/run/docker.sock
