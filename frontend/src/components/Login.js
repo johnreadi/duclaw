@@ -24,7 +24,13 @@ function Login({ onLogin }) {
       localStorage.setItem('user', JSON.stringify(response.data.user));
       onLogin(response.data.user);
     } catch (err) {
-      setError(err.response?.data?.error || 'Erreur de connexion');
+      if (err.code === 'ECONNREFUSED' || err.code === 'ERR_NETWORK') {
+        setError('Impossible de contacter le serveur. Vérifiez que le backend est démarré.');
+      } else if (err.response?.status === 401) {
+        setError('Nom d\'utilisateur ou mot de passe incorrect');
+      } else {
+        setError(err.response?.data?.error || 'Erreur de connexion au serveur');
+      }
     } finally {
       setLoading(false);
     }
