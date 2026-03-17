@@ -30,6 +30,8 @@ services:
     restart: unless-stopped
     depends_on:
       - duclaw-backend
+    ports:
+      - "3002:80"
     networks:
       - dokploy-network
     healthcheck:
