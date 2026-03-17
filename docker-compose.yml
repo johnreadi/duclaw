@@ -31,7 +31,7 @@ services:
     depends_on:
       - duclaw-backend
     ports:
-      - "3002:80"
+      - "3003:80"
     networks:
       - dokploy-network
     healthcheck:
