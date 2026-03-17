@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
   X, 
@@ -7,7 +7,9 @@ import {
   AlertTriangle,
   Lightbulb,
   Server,
-  Activity
+  Activity,
+  Shield,
+  Play
 } from 'lucide-react';
 import './ServiceDetail.css';
 
@@ -15,6 +17,7 @@ function ServiceDetail({ service, onClose }) {
   const [logs, setLogs] = useState('');
   const [showLogs, setShowLogs] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [remediation, setRemediation] = useState(null);
 
   const fetchLogs = async () => {
     setLoading(true);
@@ -44,6 +47,38 @@ function ServiceDetail({ service, onClose }) {
       alert('Erreur lors du redémarrage: ' + error.message);
     }
   };
+
+  const fetchRemediation = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`/api/services/${service.container}/remediation`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setRemediation(response.data);
+    } catch (error) {
+      console.error('Erreur:', error);
+    }
+  };
+
+  const executeRemediation = async (action) => {
+    try {
+      const token = localStorage.getItem('token');
+      await axios.post(`/api/services/${service.container}/remediate`, 
+        { action },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      alert('Action exécutée avec succès');
+      fetchRemediation();
+    } catch (error) {
+      alert('Erreur: ' + error.message);
+    }
+  };
+
+  useEffect(() => {
+    if (service.remediation) {
+      setRemediation(service.remediation);
+    }
+  }, [service]);
 
   return (
     <div className="service-detail-overlay" onClick={onClose}>
@@ -138,6 +173,33 @@ function ServiceDetail({ service, onClose }) {
             </section>
           )}
 
+          {/* Remédiation */}
+          {remediation && remediation.actions && remediation.actions.length > 0 && (
+            <section className="detail-section remediation">
+              <h3><Shield size={16} /> Actions de remédiation</h3>
+              <div className="remediation-actions">
+                {remediation.actions.map((action, idx) => (
+                  <div key={idx} className={`remediation-item ${action.priority}`}>
+                    <div className="remediation-info">
+                      <span className="remediation-type">{action.type}</span>
+                      <span className="remediation-desc">{action.description}</span>
+                      {action.automated && <span className="automated-badge">Auto</span>}
+                    </div>
+                    {!action.automated && (
+                      <button 
+                        className="btn btn-small btn-primary"
+                        onClick={() => executeRemediation(action.type)}
+                      >
+                        <Play size={14} />
+                        Exécuter
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
           {/* Actions */}
           <div className="detail-actions">
             <button 
@@ -147,6 +209,13 @@ function ServiceDetail({ service, onClose }) {
             >
               {loading ? <RefreshCw className="spin" size={16} /> : <Terminal size={16} />}
               {showLogs ? 'Rafraîchir logs' : 'Voir les logs'}
+            </button>
+            <button 
+              className="btn btn-secondary" 
+              onClick={fetchRemediation}
+            >
+              <Shield size={16} />
+              Analyser
             </button>
             <button 
               className="btn btn-danger" 

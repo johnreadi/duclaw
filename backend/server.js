@@ -13,6 +13,7 @@ const { initDatabase, saveMetric, getMetricsHistory, getActiveAlerts, acknowledg
 const AlertManager = require('./alerts');
 const SSLMonitor = require('./ssl-monitor');
 const AuthManager = require('./auth');
+const RemediationEngine = require('./remediation');
 
 const app = express();
 const server = http.createServer(app);
@@ -28,6 +29,7 @@ const docker = new Docker({ socketPath: process.env.DOCKER_SOCKET || '/var/run/d
 const alertManager = new AlertManager();
 const sslMonitor = new SSLMonitor();
 const authManager = new AuthManager();
+const remediationEngine = new RemediationEngine(docker, alertManager);
 
 // Stockage des données de monitoring
 const servicesStatus = new Map();
@@ -130,6 +132,10 @@ async function diagnoseService(containerName) {
 
     // Vérifier les alertes
     await alertManager.checkAndAlert(containerName, diagnosis);
+
+    // Évaluer et appliquer la remédiation automatique
+    const remediation = await remediationEngine.evaluateAndRemediate(containerName, diagnosis);
+    diagnosis.remediation = remediation;
 
   } catch (error) {
     diagnosis.errors.push('Erreur lors du diagnostic: ' + error.message);
@@ -279,6 +285,38 @@ app.get('/api/ssl', async (req, res) => {
   }
 });
 
+// Remédiation
+app.get('/api/services/:name/remediation', async (req, res) => {
+  try {
+    const { name } = req.params;
+    const diagnosis = await diagnoseService(name);
+    const remediation = await remediationEngine.evaluateAndRemediate(name, diagnosis);
+    res.json(remediation);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/services/:name/remediate', async (req, res) => {
+  try {
+    const { name } = req.params;
+    const { action } = req.body;
+    
+    let result;
+    switch (action) {
+      case 'restart':
+        result = await remediationEngine.restartContainer(name);
+        break;
+      default:
+        return res.status(400).json({ error: 'Action non supportée' });
+    }
+    
+    res.json({ success: result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/ssl/expiring', async (req, res) => {
   try {
     const { days = 30 } = req.query;
@@ -328,6 +366,11 @@ cron.schedule('*/30 * * * * *', checkAllServices);
 cron.schedule('0 0 * * *', async () => {
   console.log('Vérification des certificats SSL...');
   await sslMonitor.checkAllCertificates();
+});
+
+// Protection de l'infrastructure Dokploy toutes les 2 minutes
+cron.schedule('*/2 * * * *', async () => {
+  await remediationEngine.protectDokployInfrastructure();
 });
 
 // ==================== INITIALISATION ====================
