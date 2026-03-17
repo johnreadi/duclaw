@@ -76,15 +76,17 @@ async function diagnoseService(containerName) {
     }
 
     // Ressources
+    let memoryUsage = 0;
+    let cpuUsage = 0;
     try {
       const stats = await container.stats({ stream: false });
       const memLimit = stats.memory_stats?.limit || 1;
       const memUsage = stats.memory_stats?.usage || 0;
-      const memoryUsage = memLimit > 0 ? (memUsage / memLimit * 100) : 0;
+      memoryUsage = memLimit > 0 ? (memUsage / memLimit * 100) : 0;
       const cpuDelta = (stats.cpu_stats?.cpu_usage?.total_usage || 0) - (stats.precpu_stats?.cpu_usage?.total_usage || 0);
       const systemDelta = (stats.cpu_stats?.system_cpu_usage || 0) - (stats.precpu_stats?.system_cpu_usage || 0);
       const numCpus = stats.cpu_stats?.online_cpus || 1;
-      const cpuUsage = systemDelta > 0 ? (cpuDelta / systemDelta) * numCpus * 100 : 0;
+      cpuUsage = systemDelta > 0 ? (cpuDelta / systemDelta) * numCpus * 100 : 0;
 
       diagnosis.checks.memoryUsage = isFinite(memoryUsage) ? memoryUsage.toFixed(2) : '0.00';
       diagnosis.checks.cpuUsage = isFinite(cpuUsage) ? cpuUsage.toFixed(2) : '0.00';
