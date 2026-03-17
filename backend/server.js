@@ -138,7 +138,10 @@ async function diagnoseService(containerName) {
       diagnosis.checks.recentLogs = [`Logs non disponibles: ${logError.message}`];
     }
 
-    // Analyser les logs
+    // Analyser les logs selon le type de container
+    const isProxy = containerName.toLowerCase().includes('traefik');
+    const isDatabase = /redis|postgres|mysql|mongo|mariadb/.test(containerName.toLowerCase());
+
     if (logString.includes('ECONNREFUSED')) {
       diagnosis.errors.push('Erreur de connexion à la base de données ou service dépendant');
       diagnosis.recommendations.push('Vérifier que la base de données est accessible');
@@ -147,9 +150,22 @@ async function diagnoseService(containerName) {
       diagnosis.errors.push('Mémoire insuffisante (ENOMEM)');
       diagnosis.recommendations.push('Augmenter la mémoire allouée au container');
     }
-    if (logString.includes('ETIMEDOUT') || logString.includes('timeout')) {
+    // Timeouts : ignorés pour Traefik (normal qu'il rapporte des timeouts d'autres apps)
+    if (!isProxy && (logString.includes('ETIMEDOUT') || logString.includes('timeout'))) {
       diagnosis.errors.push('Timeout détecté dans les logs');
       diagnosis.recommendations.push('Vérifier les connexions externes (API tierces, DB...)');
+    }
+    // Traefik : détecter les vrais problèmes
+    if (isProxy) {
+      const timeoutCount = (logString.match(/timeout/gi) || []).length;
+      if (timeoutCount > 20) {
+        diagnosis.errors.push(`Traefik: ${timeoutCount} timeouts détectés - plusieurs services en difficulté`);
+        diagnosis.recommendations.push('Vérifier les services qui génèrent le plus de timeouts dans les logs Traefik');
+      }
+      if (logString.includes('dial tcp') && logString.includes('connection refused')) {
+        diagnosis.errors.push('Traefik: service(s) inaccessible(s)');
+        diagnosis.recommendations.push('Vérifier les containers cibles qui ne répondent plus');
+      }
     }
 
     // Sauvegarder les métriques
