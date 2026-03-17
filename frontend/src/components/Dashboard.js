@@ -9,10 +9,12 @@ import {
   Cpu,
   MemoryStick,
   Network,
-  Terminal
+  Terminal,
+  Bell
 } from 'lucide-react';
 import ServiceCard from './ServiceCard';
 import ServiceDetail from './ServiceDetail';
+import Alerts from './Alerts';
 import './Dashboard.css';
 
 function Dashboard() {
@@ -51,7 +53,10 @@ function Dashboard() {
 
   const fetchServices = async () => {
     try {
-      const response = await axios.get('/api/services');
+      const token = localStorage.getItem('token');
+      const response = await axios.get('/api/services', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       setServices(response.data);
       setLoading(false);
     } catch (error) {
@@ -121,25 +126,31 @@ function Dashboard() {
       </div>
 
       <div className="dashboard-content">
-        <div className="services-grid">
-          <h2>Services Monitorés</h2>
-          <div className="grid">
-            {services.map((service) => (
-              <ServiceCard 
-                key={service.container} 
-                service={service}
-                onClick={() => setSelectedService(service)}
-              />
-            ))}
+        <div className="main-panel">
+          <div className="services-grid">
+            <h2>Services Monitorés</h2>
+            <div className="grid">
+              {services.map((service) => (
+                <ServiceCard 
+                  key={service.container} 
+                  service={service}
+                  onClick={() => setSelectedService(service)}
+                />
+              ))}
+            </div>
           </div>
-        </div>
 
-        {selectedService && (
-          <ServiceDetail 
-            service={selectedService}
-            onClose={() => setSelectedService(null)}
-          />
-        )}
+          {selectedService && (
+            <ServiceDetail 
+              service={selectedService}
+              onClose={() => setSelectedService(null)}
+            />
+          )}
+        </div>
+        
+        <div className="sidebar">
+          <Alerts />
+        </div>
       </div>
     </div>
   );

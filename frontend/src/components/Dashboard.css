@@ -74,10 +74,20 @@
   gap: 1.5rem;
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 1280px) {
   .dashboard-content {
     grid-template-columns: 1fr 400px;
   }
+}
+
+.main-panel {
+  min-width: 0;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
 }
 
 .services-grid h2 {

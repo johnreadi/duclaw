@@ -2,9 +2,12 @@ FROM node:18-alpine
 
 WORKDIR /app
 
+# Installation des dépendances système
+RUN apk add --no-cache postgresql-client
+
 # Installation des dépendances
 COPY package*.json ./
-RUN npm install --production
+RUN npm install
 
 # Copie du code
 COPY . .

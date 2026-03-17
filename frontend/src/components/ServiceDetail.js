@@ -19,7 +19,10 @@ function ServiceDetail({ service, onClose }) {
   const fetchLogs = async () => {
     setLoading(true);
     try {
-      const response = await axios.get(`/api/services/${service.container}/logs?tail=100`);
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`/api/services/${service.container}/logs?tail=100`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       setLogs(response.data.logs);
       setShowLogs(true);
     } catch (error) {
@@ -32,7 +35,10 @@ function ServiceDetail({ service, onClose }) {
     if (!window.confirm(`Redémarrer le service ${service.container} ?`)) return;
     
     try {
-      await axios.post(`/api/services/${service.container}/restart`);
+      const token = localStorage.getItem('token');
+      await axios.post(`/api/services/${service.container}/restart`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       alert('Service redémarré avec succès');
     } catch (error) {
       alert('Erreur lors du redémarrage: ' + error.message);

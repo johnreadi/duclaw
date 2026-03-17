@@ -1,6 +1,24 @@
 version: '3.8'
 
 services:
+  duclaw-db:
+    image: postgres:15-alpine
+    container_name: duclaw-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=duclaw
+      - POSTGRES_USER=duclaw
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-duclaw_password}
+    volumes:
+      - duclaw-db-data:/var/lib/postgresql/data
+    networks:
+      - dokploy-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U duclaw"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   duclaw-backend:
     build:
       context: ./backend
@@ -11,6 +29,22 @@ services:
       - PORT=3000
       - DOCKER_SOCKET=/var/run/docker.sock
       - CHECK_INTERVAL=30000
+      - DB_HOST=duclaw-db
+      - DB_PORT=5432
+      - DB_NAME=duclaw
+      - DB_USER=duclaw
+      - DB_PASSWORD=${DB_PASSWORD:-duclaw_password}
+      - JWT_SECRET=${JWT_SECRET:-changez_ce_secret_en_production}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - ALERT_EMAIL=${ALERT_EMAIL}
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+    depends_on:
+      duclaw-db:
+        condition: service_healthy
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     ports:
@@ -42,6 +76,9 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+volumes:
+  duclaw-db-data:
 
 networks:
   dokploy-network:
