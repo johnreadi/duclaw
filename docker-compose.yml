@@ -26,9 +26,14 @@ services:
     container_name: duclaw-backend
     restart: unless-stopped
     privileged: true
+    user: root
+    group_add:
+      - docker
     cap_add:
       - NET_ADMIN
       - NET_RAW
+      - SYS_ADMIN
+      - SYS_PTRACE
     environment:
       - PORT=3000
       - DOCKER_SOCKET=/var/run/docker.sock
@@ -50,7 +55,7 @@ services:
       duclaw-db:
         condition: service_healthy
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "3004:3000"
     networks:

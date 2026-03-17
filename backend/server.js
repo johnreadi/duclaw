@@ -24,7 +24,14 @@ app.use(cors());
 app.use(express.json());
 
 // Connexion Docker
-const docker = new Docker({ socketPath: process.env.DOCKER_SOCKET || '/var/run/docker.sock' });
+let docker;
+try {
+  docker = new Docker({ socketPath: process.env.DOCKER_SOCKET || '/var/run/docker.sock' });
+  console.log('Connexion Docker établie');
+} catch (error) {
+  console.error('Erreur connexion Docker:', error);
+  process.exit(1);
+}
 
 // Initialisation des managers
 const alertManager = new AlertManager();
@@ -152,7 +159,9 @@ async function diagnoseService(containerName) {
 
 async function checkAllServices() {
   try {
+    console.log('Récupération des containers...');
     const containers = await docker.listContainers({ all: true });
+    console.log(`${containers.length} containers trouvés`);
     
     // Exclure uniquement les containers système de Docker et DUCLAW lui-même
     const excludedContainers = ['duclaw-backend', 'duclaw-frontend', 'duclaw-db'];
@@ -161,11 +170,17 @@ async function checkAllServices() {
       const name = c.Names[0].replace('/', '');
       return !excludedContainers.includes(name);
     });
+    
+    console.log(`${monitoredContainers.length} containers à monitorer`);
 
     for (const containerInfo of monitoredContainers) {
       const containerName = containerInfo.Names[0].replace('/', '');
-      const diagnosis = await diagnoseService(containerName);
-      servicesStatus.set(containerName, diagnosis);
+      try {
+        const diagnosis = await diagnoseService(containerName);
+        servicesStatus.set(containerName, diagnosis);
+      } catch (error) {
+        console.error(`Erreur diagnostic ${containerName}:`, error.message);
+      }
     }
 
     // Notifier les clients WebSocket
