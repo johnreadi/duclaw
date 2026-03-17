@@ -78,11 +78,12 @@ async function diagnoseService(containerName) {
     // Ressources
     let memoryUsage = 0;
     let cpuUsage = 0;
+    let memoryLimit = 0;
     try {
       const stats = await container.stats({ stream: false });
-      const memLimit = stats.memory_stats?.limit || 1;
+      memoryLimit = stats.memory_stats?.limit || 0;
       const memUsage = stats.memory_stats?.usage || 0;
-      memoryUsage = memLimit > 0 ? (memUsage / memLimit * 100) : 0;
+      memoryUsage = memoryLimit > 0 ? (memUsage / memoryLimit * 100) : 0;
       const cpuDelta = (stats.cpu_stats?.cpu_usage?.total_usage || 0) - (stats.precpu_stats?.cpu_usage?.total_usage || 0);
       const systemDelta = (stats.cpu_stats?.system_cpu_usage || 0) - (stats.precpu_stats?.system_cpu_usage || 0);
       const numCpus = stats.cpu_stats?.online_cpus || 1;
@@ -90,7 +91,7 @@ async function diagnoseService(containerName) {
 
       diagnosis.checks.memoryUsage = isFinite(memoryUsage) ? memoryUsage.toFixed(2) : '0.00';
       diagnosis.checks.cpuUsage = isFinite(cpuUsage) ? cpuUsage.toFixed(2) : '0.00';
-      diagnosis.checks.memoryLimit = memLimit;
+      diagnosis.checks.memoryLimit = memoryLimit;
 
       if (memoryUsage > 90) {
         diagnosis.errors.push('Mémoire saturée: ' + memoryUsage.toFixed(2) + '%');
@@ -152,15 +153,19 @@ async function diagnoseService(containerName) {
     }
 
     // Sauvegarder les métriques
-    await saveMetric({
-      container: containerName,
-      cpuUsage: cpuUsage.toFixed(2),
-      memoryUsage: memoryUsage.toFixed(2),
-      memoryLimit: stats.memory_stats.limit,
-      status: containerInfo.State.Status,
-      restartCount: containerInfo.RestartCount,
-      healthStatus: containerInfo.State.Health?.Status || 'N/A'
-    });
+    try {
+      await saveMetric({
+        container: containerName,
+        cpuUsage: isFinite(cpuUsage) ? cpuUsage.toFixed(2) : '0.00',
+        memoryUsage: isFinite(memoryUsage) ? memoryUsage.toFixed(2) : '0.00',
+        memoryLimit: memoryLimit,
+        status: containerInfo.State.Status,
+        restartCount: containerInfo.RestartCount,
+        healthStatus: containerInfo.State.Health?.Status || 'N/A'
+      });
+    } catch (metricError) {
+      // Ne pas bloquer le diagnostic si la sauvegarde échoue
+    }
 
     // Vérifier les alertes
     await alertManager.checkAndAlert(containerName, diagnosis);
