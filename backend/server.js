@@ -9,7 +9,7 @@ const path = require('path');
 require('dotenv').config();
 
 // Import des modules
-const { initDatabase, saveMetric, getMetricsHistory, getActiveAlerts, acknowledgeAlert, saveEvent } = require('./database');
+const { initDatabase, saveMetric, getMetricsHistory, getActiveAlerts, acknowledgeAlert, saveEvent, pool } = require('./database');
 const AlertManager = require('./alerts');
 const SSLMonitor = require('./ssl-monitor');
 const AuthManager = require('./auth');
@@ -263,15 +263,48 @@ app.post('/api/services/:name/restart', async (req, res) => {
     const { name } = req.params;
     const container = docker.getContainer(name);
     await container.restart();
-    
-    // Sauvegarder l'événement
-    await saveEvent({
-      container: name,
-      eventType: 'restart',
-      details: { user: req.user.username }
-    });
-    
+    await saveEvent({ container: name, eventType: 'restart', details: { user: req.user?.username } });
     res.json({ message: 'Container redémarré avec succès' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/services/:name/start', async (req, res) => {
+  try {
+    const { name } = req.params;
+    const container = docker.getContainer(name);
+    await container.start();
+    await saveEvent({ container: name, eventType: 'start', details: { user: req.user?.username } });
+    res.json({ message: 'Container démarré avec succès' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/services/:name/stop', async (req, res) => {
+  try {
+    const { name } = req.params;
+    const container = docker.getContainer(name);
+    await container.stop();
+    await saveEvent({ container: name, eventType: 'stop', details: { user: req.user?.username } });
+    res.json({ message: 'Container arrêté avec succès' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/services/:name/delete', async (req, res) => {
+  try {
+    const { name } = req.params;
+    const container = docker.getContainer(name);
+    // Arrêter d'abord si en cours
+    const info = await container.inspect();
+    if (info.State.Running) await container.stop();
+    await container.remove({ force: true });
+    servicesStatus.delete(name);
+    await saveEvent({ container: name, eventType: 'delete', details: { user: req.user?.username } });
+    res.json({ message: 'Container supprimé avec succès' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -292,6 +325,25 @@ app.post('/api/alerts/:id/acknowledge', async (req, res) => {
     const { id } = req.params;
     await acknowledgeAlert(id);
     res.json({ message: 'Alerte acquittée' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/alerts/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await pool.query('DELETE FROM alerts WHERE id = $1', [id]);
+    res.json({ message: 'Alerte supprimée' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/alerts', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM alerts WHERE acknowledged = false');
+    res.json({ message: 'Toutes les alertes supprimées' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
