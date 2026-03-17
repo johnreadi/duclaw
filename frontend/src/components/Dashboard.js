@@ -25,7 +25,8 @@ function Dashboard() {
     fetchServices();
     
     // Connexion WebSocket pour mises à jour en temps réel
-    const ws = new WebSocket(`ws://${window.location.host}`);
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws`);
     
     ws.onopen = () => {
       setWsConnected(true);
