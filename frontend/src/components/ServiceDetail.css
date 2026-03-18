@@ -319,3 +319,158 @@
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+
+/* Tabs */
+.detail-tabs {
+  display: flex;
+  border-bottom: 1px solid #334155;
+  margin-bottom: 1rem;
+  gap: 0.25rem;
+  padding: 0 1.5rem;
+  position: sticky;
+  top: 0;
+  background: #1e293b;
+  z-index: 1;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.625rem 0.875rem;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #64748b;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-bottom: -1px;
+}
+
+.tab:hover {
+  color: #94a3b8;
+}
+
+.tab.active {
+  color: #3b82f6;
+  border-bottom-color: #3b82f6;
+}
+
+/* Graphiques */
+.metrics-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.btn-icon {
+  background: #334155;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  border-radius: 0.25rem;
+  padding: 0.375rem;
+  display: flex;
+  align-items: center;
+  transition: background 0.15s;
+}
+
+.btn-icon:hover {
+  background: #475569;
+  color: #e2e8f0;
+}
+
+.no-data {
+  text-align: center;
+  color: #475569;
+  padding: 2rem;
+  font-style: italic;
+}
+
+/* Logs */
+.logs-section {
+  display: flex;
+  flex-direction: column;
+  height: 400px;
+}
+
+.logs-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.logs-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-live {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  background: #334155;
+  border: 1px solid #475569;
+  color: #94a3b8;
+  border-radius: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-live.active {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: #10b981;
+  color: #10b981;
+}
+
+.logs-content {
+  flex: 1;
+  overflow-y: auto;
+  background: #0f172a;
+  border-radius: 0.375rem;
+  padding: 0.75rem;
+  font-family: 'Courier New', monospace;
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+.log-line {
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: #94a3b8;
+  padding: 1px 0;
+}
+
+.log-line.log-error {
+  color: #ef4444;
+}
+
+.log-line.log-warn {
+  color: #f59e0b;
+}
+
+.log-line.log-info {
+  color: #10b981;
+}
+
+.log-waiting {
+  color: #475569;
+  font-style: italic;
+  text-align: center;
+  padding: 2rem;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.pulse {
+  animation: pulse 1s ease-in-out infinite;
+}

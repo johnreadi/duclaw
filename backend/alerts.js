@@ -132,6 +132,11 @@ class AlertManager {
       await this.sendDiscord(containerName, alert);
     }
 
+    // Telegram
+    if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID) {
+      await this.sendTelegram(containerName, alert);
+    }
+
     // Webhook générique
     if (process.env.ALERT_WEBHOOK_URL) {
       await this.sendWebhook(containerName, alert);
@@ -253,6 +258,101 @@ class AlertManager {
       console.log(`Webhook envoyé pour ${containerName}`);
     } catch (error) {
       console.error('Erreur lors de l\'envoi du webhook:', error);
+    }
+  }
+
+  async sendTelegram(containerName, alert) {
+    if (!process.env.TELEGRAM_BOT_TOKEN || !process.env.TELEGRAM_CHAT_ID) return;
+    const emoji = alert.severity === 'critical' ? '🚨' : alert.severity === 'warning' ? '⚠️' : 'ℹ️';
+    const text = `${emoji} *DUCLAW Alert*\n\n*Container:* \`${containerName}\`\n*Type:* ${alert.type}\n*Severité:* ${alert.severity.toUpperCase()}\n*Message:* ${alert.message}\n*Date:* ${new Date().toLocaleString('fr-FR')}`;
+    try {
+      await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: process.env.TELEGRAM_CHAT_ID,
+          text,
+          parse_mode: 'Markdown'
+        })
+      });
+      console.log(`Notification Telegram envoyée pour ${containerName}`);
+    } catch (error) {
+      console.error('Erreur Telegram:', error.message);
+    }
+  }
+
+  async sendDailyReport(services) {
+    if (!this.transporter || !process.env.ALERT_EMAIL) return;
+    const total = services.length;
+    const running = services.filter(s => s.checks?.containerRunning).length;
+    const errors = services.filter(s => s.errors?.length > 0);
+    const stopped = services.filter(s => !s.checks?.containerRunning);
+
+    const errorsHtml = errors.map(s => `
+      <tr>
+        <td style="padding:6px 12px;border-bottom:1px solid #334155;color:#f8fafc">${s.container}</td>
+        <td style="padding:6px 12px;border-bottom:1px solid #334155;color:#ef4444">${s.errors.join(', ')}</td>
+      </tr>`).join('');
+
+    const html = `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8"></head>
+    <body style="background:#0f172a;font-family:Arial,sans-serif;color:#f8fafc;padding:2rem">
+      <div style="max-width:600px;margin:0 auto">
+        <h1 style="color:#3b82f6;border-bottom:2px solid #334155;padding-bottom:1rem">
+          📊 DUCLAW - Rapport Quotidien
+        </h1>
+        <p style="color:#94a3b8">${new Date().toLocaleDateString('fr-FR', { weekday:'long', year:'numeric', month:'long', day:'numeric' })}</p>
+
+        <div style="display:flex;gap:1rem;margin:1.5rem 0">
+          <div style="background:#1e293b;border-radius:0.5rem;padding:1rem;flex:1;text-align:center">
+            <div style="font-size:2rem;font-weight:bold">${total}</div>
+            <div style="color:#94a3b8;font-size:0.875rem">Total</div>
+          </div>
+          <div style="background:#1e293b;border-radius:0.5rem;padding:1rem;flex:1;text-align:center">
+            <div style="font-size:2rem;font-weight:bold;color:#10b981">${running}</div>
+            <div style="color:#94a3b8;font-size:0.875rem">En cours</div>
+          </div>
+          <div style="background:#1e293b;border-radius:0.5rem;padding:1rem;flex:1;text-align:center">
+            <div style="font-size:2rem;font-weight:bold;color:#ef4444">${errors.length}</div>
+            <div style="color:#94a3b8;font-size:0.875rem">Erreurs</div>
+          </div>
+          <div style="background:#1e293b;border-radius:0.5rem;padding:1rem;flex:1;text-align:center">
+            <div style="font-size:2rem;font-weight:bold;color:#f59e0b">${stopped.length}</div>
+            <div style="color:#94a3b8;font-size:0.875rem">Arrêtés</div>
+          </div>
+        </div>
+
+        ${errors.length > 0 ? `
+        <h2 style="color:#ef4444">Containers avec erreurs</h2>
+        <table style="width:100%;border-collapse:collapse;background:#1e293b;border-radius:0.5rem">
+          <thead>
+            <tr>
+              <th style="padding:8px 12px;text-align:left;color:#64748b;font-size:0.8rem">Container</th>
+              <th style="padding:8px 12px;text-align:left;color:#64748b;font-size:0.8rem">Erreurs</th>
+            </tr>
+          </thead>
+          <tbody>${errorsHtml}</tbody>
+        </table>` : '<p style="color:#10b981">✅ Aucune erreur détectée !</p>'}
+
+        <p style="color:#475569;font-size:0.75rem;margin-top:2rem;border-top:1px solid #334155;padding-top:1rem">
+          Généré automatiquement par DUCLAW Monitoring
+        </p>
+      </div>
+    </body>
+    </html>`;
+
+    try {
+      await this.transporter.sendMail({
+        from: process.env.SMTP_USER,
+        to: process.env.ALERT_EMAIL,
+        subject: `📊 DUCLAW Rapport - ${new Date().toLocaleDateString('fr-FR')} - ${errors.length > 0 ? '⚠️ ' + errors.length + ' erreur(s)' : '✅ OK'}`,
+        html
+      });
+      console.log('Rapport quotidien envoyé');
+    } catch (error) {
+      console.error('Erreur envoi rapport:', error.message);
     }
   }
 

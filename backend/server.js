@@ -18,10 +18,24 @@ const SecurityMonitor = require('./security-monitor');
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+const wss = new WebSocket.Server({ server, path: '/ws' });
+
+// Rate limiting simple
+const rateLimitMap = new Map();
+const rateLimit = (maxReq = 100, windowMs = 60000) => (req, res, next) => {
+  const key = req.ip;
+  const now = Date.now();
+  const entry = rateLimitMap.get(key) || { count: 0, resetAt: now + windowMs };
+  if (now > entry.resetAt) { entry.count = 0; entry.resetAt = now + windowMs; }
+  entry.count++;
+  rateLimitMap.set(key, entry);
+  if (entry.count > maxReq) return res.status(429).json({ error: 'Trop de requêtes' });
+  next();
+};
 
 app.use(cors());
 app.use(express.json());
+app.use(rateLimit(200, 60000)); // 200 req/min max
 
 // Connexion Docker
 let docker;
@@ -484,14 +498,86 @@ app.post('/api/users', AuthManager.requireAdmin, async (req, res) => {
   }
 });
 
+app.delete('/api/users/:id', AuthManager.requireAdmin, async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id);
+    await authManager.deleteUser(userId);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==================== AUDIT LOG ====================
+
+app.get('/api/audit', AuthManager.requireAdmin, async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+    const result = await pool.query(
+      `SELECT * FROM events ORDER BY created_at DESC LIMIT $1`,
+      [limit]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ==================== WEBSOCKET ====================
 
-wss.on('connection', (ws) => {
+// WebSocket principal : monitoring en temps réel
+wss.on('connection', (ws, req) => {
   console.log('Nouveau client connecté');
   ws.send(JSON.stringify({
     type: 'initial',
     data: Array.from(servicesStatus.values())
   }));
+});
+
+// WebSocket pour logs en temps réel par container
+const wssLogs = new WebSocket.Server({ server, path: '/ws/logs' });
+wssLogs.on('connection', (ws, req) => {
+  // Extraire le nom du container de l'URL
+  const containerName = decodeURIComponent(req.url.replace('/ws/logs/', '').replace('/ws/logs', ''));
+  if (!containerName) { ws.close(); return; }
+
+  console.log(`Live logs pour: ${containerName}`);
+  let logStream = null;
+
+  const startStream = async () => {
+    try {
+      const container = docker.getContainer(containerName);
+      logStream = await container.logs({
+        follow: true,
+        stdout: true,
+        stderr: true,
+        tail: 50,
+        timestamps: true
+      });
+
+      logStream.on('data', (chunk) => {
+        const line = chunk.toString('utf-8')
+          .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+          .trim();
+        if (line && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'log', line }));
+        }
+      });
+
+      logStream.on('error', () => ws.close());
+    } catch (e) {
+      console.error('Erreur logs live:', e.message);
+      ws.close();
+    }
+  };
+
+  startStream();
+
+  ws.on('close', () => {
+    if (logStream) {
+      try { logStream.destroy(); } catch (e) {}
+    }
+  });
 });
 
 // ==================== CRON JOBS ====================
@@ -531,6 +617,13 @@ cron.schedule('*/5 * * * *', async () => {
 cron.schedule('*/2 * * * *', async () => {
   await securityMonitor.checkDiskSpace();
   await securityMonitor.checkMemoryUsage();
+});
+
+// Rapport quotidien à 8h du matin
+cron.schedule('0 8 * * *', async () => {
+  console.log('Envoi rapport quotidien...');
+  const services = Array.from(servicesStatus.values());
+  await alertManager.sendDailyReport(services);
 });
 
 // ==================== INITIALISATION ====================
