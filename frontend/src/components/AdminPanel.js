@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Users, Plus, Trash2, RefreshCw, Shield, Clock, Terminal, X } from 'lucide-react';
+import { Users, Plus, Trash2, RefreshCw, Shield, Clock } from 'lucide-react';
 import './AdminPanel.css';
 
 function AdminPanel() {

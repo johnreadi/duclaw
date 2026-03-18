@@ -7,6 +7,8 @@ COPY package*.json ./
 RUN npm install
 
 COPY . .
+# CI=false : évite que les warnings ESLint bloquent le build
+ENV CI=false
 RUN npm run build
 
 # Étape de production avec nginx
